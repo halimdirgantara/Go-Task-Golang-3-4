@@ -1,49 +1,95 @@
 package config
 
 import (
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/jinzhu/gorm"
+	"database/sql"
+	"errors"
+	"fmt"
+	"log"
 	"os"
-	"task-list/models"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/ichtrojan/thoth"
+	_ "github.com/joho/godotenv/autoload"
 )
 
-type config struct {
-	db_connection string
-	db_name string
-	db_host string
-	db_port string
-	db_username string
-	db_password string
-}
+func Database() *sql.DB {
+	logger, _ := thoth.Init("log")
 
-func Init() *gorm.DB {
-	InitialDB, _ := gorm.Open(connectionMap().db_connection, assembleConfig())
-	InitialDB.AutoMigrate(&Models.Task{})
-	return InitialDB
-}
+	// dbname, exist := os.LookupEnv("DB_NAME")
 
-func connectionMap() config {
+	// if !exist {
+	// 	logger.Log(errors.New("DB_NAME not set in .env"))
+	// 	log.Fatal("DB_NAME not set in .env")
+	// }
 
-	conf := config{
-		db_connection: os.Getenv("DB_CONNECTION"),
-		db_name:     os.Getenv("DB_NAME"),
-		db_host:     os.Getenv("DB_HOST"),
-		db_port:     os.Getenv("DB_PORT"),
-		db_username: os.Getenv("DB_USERNAME"),
-		db_password: os.Getenv("DB_PASSWORD"),
+	user, exist := os.LookupEnv("DB_USER")
+
+	if !exist {
+		logger.Log(errors.New("DB_USER not set in .env"))
+		log.Fatal("DB_USER not set in .env")
 	}
 
-	return conf
-}
+	pass, exist := os.LookupEnv("DB_PASS")
 
-func assembleConfig() string {
+	if !exist {
+		logger.Log(errors.New("DB_PASS not set in .env"))
+		log.Fatal("DB_PASS not set in .env")
+	}
 
-	conf := connectionMap().db_username + ":" +
-		connectionMap().db_password + "@(" +
-		connectionMap().db_host + ":" +
-		connectionMap().db_port + ")/" +
-		connectionMap().db_name + "?" +
-		"parseTime=true"
+	host, exist := os.LookupEnv("DB_HOST")
 
-	return conf
+	if !exist {
+		logger.Log(errors.New("DB_HOST not set in .env"))
+		log.Fatal("DB_HOST not set in .env")
+	}
+
+	// dbport, exist := os.LookupEnv("DB_PORT")
+
+	// if !exist {
+	// 	logger.Log(errors.New("DB_PORT not set in .env"))
+	// 	log.Fatal("DB_PORT not set in .env")
+	// }
+
+	credentials := fmt.Sprintf("%s:%s@(%s:3306)/?charset=utf8&parseTime=True", user, pass, host)
+
+	database, err := sql.Open("mysql", credentials)
+
+	if err != nil {
+		logger.Log(err)
+		log.Fatal(err)
+	} else {
+		fmt.Println("Database Connection Successful")
+	}
+
+	_, err = database.Exec(`CREATE DATABASE IF NOT EXISTS gotask_db`)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	_, err = database.Exec(`USE gotask_db`)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	_, err = database.Exec(`
+		CREATE TABLE IF NOT EXISTS tasks (
+		    id INT AUTO_INCREMENT PRIMARY KEY,
+		    name VARCHAR(255) NOT NULL,
+		    description TEXT NOT NULL,
+		    employee VARCHAR(255) NOT NULL,
+		    deadline DATETIME NOT NULL,
+		    status VARCHAR(50) NOT NULL DEFAULT 'In Progress',
+		    completed BOOLEAN DEFAULT FALSE,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
+			updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP 
+		);
+	`)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return database
 }
